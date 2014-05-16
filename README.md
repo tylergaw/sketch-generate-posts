@@ -8,9 +8,10 @@ cobbled together.
 ## Usage
 There's a sample sketch file in this repo. I'll write better docs in the future,
 for now:
-1. Open the tester Sketch file
-2. Select the group named "original post" on
+
+ 1. Open the tester Sketch file
+ 2. Select the group named "original post" on
 either page.
-3. Run the Generate Posts plugin
+ 3. Run the Generate Posts plugin
 
 You should be prompted for a URL to a JSON file, and the number of posts you want.
