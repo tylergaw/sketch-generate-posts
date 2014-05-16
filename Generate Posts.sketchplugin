@@ -1,0 +1,130 @@
+// (cmd alt p)
+
+var app = NSApplication.sharedApplication();
+
+if (selection.count() == 0) {
+  app.displayDialog_withTitle("You'll need to select a group of layers that makes up your post.", "No Group Selected");
+}
+else {
+  var persistent = NSThread.mainThread().threadDictionary();
+
+  var jsonURL = doc.askForUserInput_initialValue("Where has the JSON gone!?", persistent["jsonURL"] || "");
+  var res = httpGET(jsonURL);
+  var json = JSON.parse(NSString.alloc().initWithData_encoding(res, NSUTF8StringEncoding));
+
+  if (json) {
+    // Store the jsonURL in case you want to use it again.
+    persistent["jsonURL"] = jsonURL;
+
+    var items = json.rss.channel.item;
+    var numOfPosts = doc.askForUserInput_initialValue("How many posts do you want?", persistent["numOfPosts"] || "");
+    persistent["numOfPosts"] = numOfPosts;
+
+    doc.showMessage("Generating " + numOfPosts + " posts...");
+
+    for (var i = 0; i < numOfPosts; i += 1) {
+      var item = items[Math.floor(Math.random() * (items.length - 0 + 1))];
+      generatePost(selection[0].duplicate(), item, numOfPosts - i);
+    }
+  }
+  else {
+    app.displayDialog_withTitle("You'll need to provide a URL to value JSON.", "No JSON Found");
+  }
+}
+
+function generatePost (post, data, postNumber) {
+  // These are used for custom layer processing
+  var customProcessors = {
+    "pubDate": function (str) {
+      return formatDateStr(str);
+    },
+
+    "image": function (imgGroup) {
+      var imgLayers = imgGroup.layers();
+      addPlaceholderImgToGroup(imgGroup);
+    },
+
+    "description": function (str) {
+      return sanitizeText(str);
+    }
+  }
+
+  post.setName("post " + (postNumber + 1));
+
+  // Position the post after the previous
+  var postHeight = post.frame().height();
+  post.frame().addY(postHeight * postNumber);
+
+  var layers = post.layers();
+
+
+  for (var i = 0; i < layers.count(); i += 1) {
+    var curLayer = layers.objectAtIndex(i);
+    var key = curLayer.name();
+    var strValue = null;
+
+    if (key == 'image') {
+      customProcessors["image"](curLayer);
+    }
+
+    if (data[key]) {
+      strValue = data[key];
+
+      if (customProcessors[key]) {
+        strValue = customProcessors[key](data[key]);
+      }
+
+      if (curLayer.className() == 'MSTextLayer') {
+        curLayer.setStringValue(strValue);
+      }
+    }
+  }
+}
+
+// Request an image from the placeholder service lorempixel.com and add it
+// to the given group.
+function addPlaceholderImgToGroup (group) {
+  // The topic of the image placeholder
+  var topics = ['animals', 'city', 'food', 'nature'];
+  var randTopic = topics[Math.floor(Math.random() * (topics.length - 0 + 1))];
+
+  // We're going to get an image that is the width/height of the mask, plus
+  // some extra, that I'm setting arbitrarily.
+  var mask = group.layers().objectAtIndex(0);
+  group.removeLayer(group.layers().objectAtIndex(1));
+  var extraImgSize = 20;
+  var imgWidth = mask.frame().width() + extraImgSize;
+  var imgHeight = mask.frame().height() + extraImgSize;
+  var res = httpGET("http://lorempixel.com/" + imgWidth + "/" + imgHeight + "/" + randTopic);
+  var img = NSImage.alloc().initWithData(res);
+
+  var imgLayerName = 'image';
+  var imageCollection = group.documentData().images();
+  var imageData = imageCollection.addImage_name_convertColourspace(img, imgLayerName, false);
+  var newImage = MSBitmapLayer.alloc().initWithImage_parentFrame_name(imageData, group.frame(), imgLayerName);
+  group.addLayer(newImage);
+}
+
+function formatDateStr (str) {
+  var d = new Date(str);
+
+  // I pulled some of this from moment.js. They smrt
+  var days = "Sunday_Monday_Tuesday_Wednesday_Thursday_Friday_Saturday".split("_");
+  var daysShort = "Sun_Mon_Tue_Wed_Thu_Fri_Sat".split("_");
+  var months = "January_February_March_April_May_June_July_August_September_October_November_December".split("_");
+  var monthsShort = "Jan_Feb_Mar_Apr_May_Jun_Jul_Aug_Sep_Oct_Nov_Dec".split("_");
+  var formatted = daysShort[d.getDay()] + '. ' + months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+
+  return formatted;
+}
+
+// Quick and dirty html removal
+function sanitizeText (str) {
+  return str.replace(/<\/?[^>]+(>|$)/g, "");
+}
+
+function httpGET (url) {
+  var request = NSURLRequest.requestWithURL(NSURL.URLWithString(url));
+  var response = NSURLConnection.sendSynchronousRequest_returningResponse_error(request, null, null);
+  return response;
+}
